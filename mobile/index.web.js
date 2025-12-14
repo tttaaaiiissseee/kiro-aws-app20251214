@@ -1,6 +1,6 @@
-import { AppRegistry } from 'react-native';
+import React from 'react';
+import ReactDOM from 'react-dom/client';
 import App from './App';
-import { name as appName } from './app.json';
 
 // Web用のスタイルを追加
 if (typeof document !== 'undefined') {
@@ -19,8 +19,6 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(style);
 }
 
-AppRegistry.registerComponent(appName, () => App);
-AppRegistry.runApplication(appName, {
-  initialProps: {},
-  rootTag: document.getElementById('root'),
-});
+// React 18の新しいAPIを使用
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
