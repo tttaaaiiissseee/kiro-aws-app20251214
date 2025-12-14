@@ -1,0 +1,32 @@
+# 開発環境用のオーバーライド設定
+
+services:
+  frontend:
+    build:
+      target: dev
+    volumes:
+      - ./frontend:/app:rw
+      - /app/node_modules
+      - frontend_cache:/app/.vite
+    environment:
+      - NODE_ENV=development
+      - REACT_APP_API_URL=http://localhost:8000
+
+  backend:
+    build:
+      target: dev
+    volumes:
+      - ./backend:/app:rw
+      - /app/node_modules
+      - sqlite_data:/app/prisma
+      - uploads_data:/app/uploads
+      - backend_cache:/app/.cache
+    environment:
+      - NODE_ENV=development
+      - LOG_LEVEL=debug
+    command: ["npm", "run", "dev"]
+
+  # 開発環境ではnginxを無効化
+  nginx:
+    profiles:
+      - disabled

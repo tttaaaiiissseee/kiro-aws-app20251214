@@ -1,0 +1,88 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  description String?
+  color       String?   // UI表示用カラーコード
+  services    Service[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Service {
+  id            String                    @id @default(cuid())
+  name          String                    @unique
+  description   String?
+  category      Category                  @relation(fields: [categoryId], references: [id])
+  categoryId    String
+  memos         Memo[]
+  fromRelations Relation[]                @relation("FromService")
+  toRelations   Relation[]                @relation("ToService")
+  attributeValues ServiceAttributeValue[]
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+}
+
+model Memo {
+  id        String   @id @default(cuid())
+  type      String   // MemoType: TEXT, LINK, IMAGE
+  content   String   // テキスト内容またはファイルパス
+  title     String?  // オプションタイトル
+  service   Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  serviceId String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Relation {
+  id            String  @id @default(cuid())
+  type          String  // RelationType: INTEGRATES_WITH, DEPENDS_ON, ALTERNATIVE_TO
+  fromService   Service @relation("FromService", fields: [fromServiceId], references: [id], onDelete: Cascade)
+  fromServiceId String
+  toService     Service @relation("ToService", fields: [toServiceId], references: [id], onDelete: Cascade)
+  toServiceId   String
+  description   String? // 関係の詳細説明
+  createdAt     DateTime @default(now())
+
+  @@unique([fromServiceId, toServiceId, type])
+}
+
+model ComparisonAttribute {
+  id          String                    @id @default(cuid())
+  name        String                    @unique
+  description String?
+  dataType    String                    // TEXT, NUMBER, BOOLEAN, URL
+  isDefault   Boolean                   @default(false) // 標準属性かカスタム属性か
+  values      ServiceAttributeValue[]
+  createdAt   DateTime                  @default(now())
+  updatedAt   DateTime                  @updatedAt
+}
+
+model ServiceAttributeValue {
+  id          String              @id @default(cuid())
+  service     Service             @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  serviceId   String
+  attribute   ComparisonAttribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  attributeId String
+  value       String              // JSON文字列として保存
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@unique([serviceId, attributeId])
+}
+
+// Note: SQLite doesn't support native enums
+// Type safety is provided by TypeScript enums in src/types/enums.ts
+// MemoType: TEXT, LINK, IMAGE
+// RelationType: INTEGRATES_WITH, DEPENDS_ON, ALTERNATIVE_TO

@@ -1,0 +1,61 @@
+# Git関連
+.git
+.gitignore
+.gitattributes
+
+# ドキュメント
+README.md
+*.md
+docs/
+
+# 環境設定
+.env
+.env.*
+!.env.example
+
+# ログファイル
+*.log
+logs/
+
+# 依存関係（Dockerで再インストール）
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ビルド成果物
+dist/
+build/
+
+# テスト関連
+coverage/
+.nyc_output/
+test-results/
+
+# IDE設定
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS関連
+.DS_Store
+Thumbs.db
+
+# Docker関連
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# 一時ファイル
+tmp/
+temp/
+
+# キャッシュ
+.cache/
+.npm/
+.yarn/
+
+# プロダクション用設定（開発時は除外）
+nginx/
