@@ -16,13 +16,20 @@ AWSサービスの知識を体系的に整理・管理し、効率的な学習�
 
 ## 技術スタック
 
-### フロントエンド
+### Webフロントエンド
 - React 18 + TypeScript
 - Tailwind CSS
 - React Router
 - React Query
 - React Flow
 - @dnd-kit (ドラッグ&ドロップ機能)
+
+### モバイルアプリ (React Native)
+- React Native 0.83.0 + TypeScript
+- React Navigation
+- React Query
+- React Native Vector Icons
+- React Native Gesture Handler
 
 ### バックエンド
 - Node.js + Express + TypeScript
@@ -65,9 +72,26 @@ docker-compose exec backend npm run db:seed
 
 ### アクセス
 
-- フロントエンド: http://localhost:3000
+- Webフロントエンド: http://localhost:3000
 - バックエンドAPI: http://localhost:8000
 - ヘルスチェック: http://localhost:8000/health
+
+### モバイルアプリ開発
+
+React Nativeモバイルアプリも利用可能です：
+
+```bash
+cd mobile
+npm install
+
+# iOS (macOSのみ)
+npm run ios
+
+# Android
+npm run android
+```
+
+詳細は [mobile/REACT_NATIVE_IMPLEMENTATION.md](mobile/REACT_NATIVE_IMPLEMENTATION.md) を参照してください。
 
 ## 使用方法
 
