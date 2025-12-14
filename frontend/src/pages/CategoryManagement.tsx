@@ -1,5 +1,24 @@
 import React, { useState } from 'react';
-import { useCategories, useCreateCategory, useUpdateCategory, useDeleteCategory } from '../hooks/useCategories';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import {
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { useCategories, useCreateCategory, useUpdateCategory, useDeleteCategory, useReorderCategories } from '../hooks/useCategories';
 import { useToast } from '../components/Toast';
 import { Category, CreateCategoryRequest, UpdateCategoryRequest } from '../types/api';
 
@@ -22,6 +41,93 @@ const DEFAULT_COLORS = [
   '#6B7280', // Gray
 ];
 
+// Sortable Category Item Component
+interface SortableCategoryItemProps {
+  category: Category;
+  onEdit: (category: Category) => void;
+  onDelete: (category: Category) => void;
+}
+
+const SortableCategoryItem: React.FC<SortableCategoryItemProps> = ({ category, onEdit, onDelete }) => {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: category.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow ${
+        isDragging ? 'shadow-lg' : ''
+      }`}
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex items-center space-x-3 flex-1">
+          {/* Drag Handle */}
+          <div
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600"
+            title="ドラッグして並び替え"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+            </svg>
+          </div>
+          <div
+            className="w-4 h-4 rounded-full flex-shrink-0"
+            style={{ backgroundColor: category.color || DEFAULT_COLORS[0] }}
+          />
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-medium text-gray-900 truncate">
+              {category.name}
+            </h3>
+            {category.description && (
+              <p className="text-sm text-gray-500 mt-1 line-clamp-2">
+                {category.description}
+              </p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center space-x-2 ml-2">
+          <button
+            onClick={() => onEdit(category)}
+            className="text-gray-400 hover:text-blue-600 transition-colors"
+            title="編集"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+          <button
+            onClick={() => onDelete(category)}
+            className="text-gray-400 hover:text-red-600 transition-colors"
+            title="削除"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div className="mt-3 text-xs text-gray-500">
+        作成日: {new Date(category.createdAt).toLocaleDateString('ja-JP')}
+      </div>
+    </div>
+  );
+};
+
 const CategoryManagement: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
@@ -36,7 +142,16 @@ const CategoryManagement: React.FC = () => {
   const createCategoryMutation = useCreateCategory();
   const updateCategoryMutation = useUpdateCategory();
   const deleteCategoryMutation = useDeleteCategory();
+  const reorderCategoriesMutation = useReorderCategories();
   const { showSuccess, showError } = useToast();
+
+  // Drag and drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const resetForm = () => {
     setFormData({
@@ -143,6 +258,25 @@ const CategoryManagement: React.FC = () => {
     }
   };
 
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = categories.findIndex(category => category.id === active.id);
+      const newIndex = categories.findIndex(category => category.id === over.id);
+
+      const reorderedCategories = arrayMove(categories, oldIndex, newIndex);
+      const categoryOrders = reorderedCategories.map(category => ({ id: category.id }));
+
+      try {
+        await reorderCategoriesMutation.mutateAsync(categoryOrders);
+        showSuccess('カテゴリの並び順が更新されました');
+      } catch (error: any) {
+        showError(error.response?.data?.error?.message || '並び順の更新に失敗しました');
+      }
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -179,7 +313,7 @@ const CategoryManagement: React.FC = () => {
         </div>
       </div>
 
-      {/* Categories Grid */}
+      {/* Categories List with Drag & Drop */}
       <div className="bg-white shadow rounded-lg">
         {categories.length === 0 ? (
           <div className="p-6 text-center">
@@ -192,55 +326,34 @@ const CategoryManagement: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 p-6">
-            {categories.map((category) => (
-              <div
-                key={category.id}
-                className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+          <div className="p-6">
+            <div className="mb-4 text-sm text-gray-600">
+              <svg className="w-4 h-4 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+              </svg>
+              ドラッグ&ドロップで並び順を変更できます
+            </div>
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={categories.map(category => category.id)}
+                strategy={verticalListSortingStrategy}
               >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center space-x-3 flex-1">
-                    <div
-                      className="w-4 h-4 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: category.color || DEFAULT_COLORS[0] }}
+                <div className="space-y-3">
+                  {categories.map((category) => (
+                    <SortableCategoryItem
+                      key={category.id}
+                      category={category}
+                      onEdit={openEditModal}
+                      onDelete={handleDelete}
                     />
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-medium text-gray-900 truncate">
-                        {category.name}
-                      </h3>
-                      {category.description && (
-                        <p className="text-sm text-gray-500 mt-1 line-clamp-2">
-                          {category.description}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2 ml-2">
-                    <button
-                      onClick={() => openEditModal(category)}
-                      className="text-gray-400 hover:text-blue-600 transition-colors"
-                      title="編集"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-                    <button
-                      onClick={() => handleDelete(category)}
-                      className="text-gray-400 hover:text-red-600 transition-colors"
-                      title="削除"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
-                  </div>
+                  ))}
                 </div>
-                <div className="mt-3 text-xs text-gray-500">
-                  作成日: {new Date(category.createdAt).toLocaleDateString('ja-JP')}
-                </div>
-              </div>
-            ))}
+              </SortableContext>
+            </DndContext>
           </div>
         )}
       </div>

@@ -28,8 +28,8 @@ export const useCategories = (options?: {
     queryFn: categoriesApi.getAll,
     enabled: options?.enabled,
     select: (data: Category[]) => {
-      // Sort categories by name for consistent ordering
-      return data.sort((a, b) => a.name.localeCompare(b.name));
+      // Categories are already sorted by sortOrder and name from the backend
+      return data;
     },
     onError: (error) => {
       console.error('Failed to fetch categories:', apiUtils.getErrorMessage(error));
@@ -247,6 +247,50 @@ export const useCategoryStats = () => {
       (category._count?.services ?? 0) > (max._count?.services ?? 0) ? category : max
     , categories[0]) ?? null,
   };
+};
+
+// Enhanced reorder categories with optimistic updates
+export const useReorderCategories = (options?: {
+  onSuccess?: (categories: Category[]) => void;
+  onError?: (error: any) => void;
+}) => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (categoryOrders: { id: string }[]) => categoriesApi.reorder(categoryOrders),
+    onMutate: async (categoryOrders) => {
+      // Cancel queries
+      await queryClient.cancelQueries(categoryKeys.lists());
+
+      // Snapshot previous values
+      const previousCategories = queryClient.getQueryData<Category[]>(categoryKeys.lists());
+
+      // Optimistically update
+      if (previousCategories) {
+        const reorderedCategories = categoryOrders.map((order, index) => {
+          const category = previousCategories.find(c => c.id === order.id);
+          return category ? { ...category, sortOrder: index } : null;
+        }).filter(Boolean) as Category[];
+        
+        queryClient.setQueryData(categoryKeys.lists(), reorderedCategories);
+      }
+
+      return { previousCategories };
+    },
+    onError: (error, _variables, context) => {
+      // Rollback on error
+      if (context?.previousCategories) {
+        queryClient.setQueryData(categoryKeys.lists(), context.previousCategories);
+      }
+      console.error('Failed to reorder categories:', apiUtils.getErrorMessage(error));
+      options?.onError?.(error);
+    },
+    onSuccess: (reorderedCategories) => {
+      // Update cache with real data
+      queryClient.setQueryData(categoryKeys.lists(), reorderedCategories);
+      options?.onSuccess?.(reorderedCategories);
+    },
+  });
 };
 
 // Utility hook for getting category colors

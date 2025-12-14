@@ -8,7 +8,10 @@ const router = Router();
 router.get('/', asyncHandler(async (req: Request, res: Response) => {
   try {
     const categories = await prisma.category.findMany({
-      orderBy: { name: 'asc' },
+      orderBy: [
+        { sortOrder: 'asc' },
+        { name: 'asc' }
+      ],
       include: {
         _count: {
           select: {
@@ -83,6 +86,83 @@ router.post('/',
   })
 );
 
+// PUT /api/categories/reorder - カテゴリ並び順更新
+router.put('/reorder', asyncHandler(async (req: Request, res: Response): Promise<void> => {
+  const { categoryOrders } = req.body;
+  
+  if (!Array.isArray(categoryOrders)) {
+    res.status(400).json({
+      error: {
+        code: 'INVALID_REQUEST_FORMAT',
+        message: 'categoryOrdersは配列である必要があります。',
+        details: { received: typeof categoryOrders }
+      },
+      timestamp: new Date().toISOString(),
+      path: req.path
+    });
+    return;
+  }
+  
+  try {
+    // Validate all category IDs exist
+    const categoryIds = categoryOrders.map((item: any) => item.id);
+    const existingCategories = await prisma.category.findMany({
+      where: { id: { in: categoryIds } },
+      select: { id: true }
+    });
+    
+    if (existingCategories.length !== categoryIds.length) {
+      res.status(400).json({
+        error: {
+          code: 'INVALID_CATEGORY_IDS',
+          message: '存在しないカテゴリIDが含まれています。',
+          details: { 
+            provided: categoryIds.length,
+            found: existingCategories.length
+          }
+        },
+        timestamp: new Date().toISOString(),
+        path: req.path
+      });
+      return;
+    }
+    
+    // Update sort orders in a transaction
+    await prisma.$transaction(
+      categoryOrders.map((item: any, index: number) =>
+        prisma.category.update({
+          where: { id: item.id },
+          data: { sortOrder: index }
+        })
+      )
+    );
+    
+    // Fetch updated categories
+    const updatedCategories = await prisma.category.findMany({
+      orderBy: [
+        { sortOrder: 'asc' },
+        { name: 'asc' }
+      ],
+      include: {
+        _count: {
+          select: {
+            services: true
+          }
+        }
+      }
+    });
+    
+    res.json({
+      data: updatedCategories,
+      message: 'カテゴリの並び順が正常に更新されました。',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error reordering categories:', error);
+    throw new Error('カテゴリの並び順更新に失敗しました。');
+  }
+}));
+
 // PUT /api/categories/:id - カテゴリ更新
 router.put('/:id',
   validateCategoryName,
@@ -135,7 +215,8 @@ router.put('/:id',
         data: {
           ...(name && { name }),
           ...(description !== undefined && { description: description || null }),
-          ...(color !== undefined && { color: color || null })
+          ...(color !== undefined && { color: color || null }),
+          ...(req.body.sortOrder !== undefined && { sortOrder: req.body.sortOrder })
         },
         include: {
           _count: {

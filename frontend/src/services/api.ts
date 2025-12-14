@@ -86,6 +86,11 @@ export const categoriesApi = {
   delete: async (id: string): Promise<void> => {
     await apiClient.delete(`/categories/${id}`);
   },
+
+  reorder: async (categoryOrders: { id: string }[]): Promise<Category[]> => {
+    const response = await apiClient.put('/categories/reorder', { categoryOrders });
+    return response.data.data || response.data;
+  },
 };
 
 // Memos API

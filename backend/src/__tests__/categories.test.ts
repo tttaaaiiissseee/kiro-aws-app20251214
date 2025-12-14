@@ -10,6 +10,7 @@ const mockPrisma = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  $transaction: jest.fn(),
 } as any;
 
 // Mock the prisma import
@@ -75,7 +76,10 @@ describe('Categories API', () => {
       expect(response.body.data).toEqual(mockCategories);
       expect(response.body.count).toBe(2);
       expect(mockPrisma.category.findMany).toHaveBeenCalledWith({
-        orderBy: { name: 'asc' },
+        orderBy: [
+          { sortOrder: 'asc' },
+          { name: 'asc' }
+        ],
         include: {
           _count: {
             select: {
@@ -271,6 +275,99 @@ describe('Categories API', () => {
 
       expect(response.status).toBe(409);
       expect(response.body.error.code).toBe('DUPLICATE_CATEGORY_NAME');
+    });
+  });
+
+  describe('PUT /api/categories/reorder', () => {
+    it('should reorder categories successfully', async () => {
+      const categoryOrders = [
+        { id: 'cat2' },
+        { id: 'cat1' },
+        { id: 'cat3' }
+      ];
+
+      const mockExistingCategories = [
+        { id: 'cat1' },
+        { id: 'cat2' },
+        { id: 'cat3' }
+      ];
+
+      const mockReorderedCategories = [
+        {
+          id: 'cat2',
+          name: 'Storage',
+          description: 'Storage services',
+          color: '#00ff00',
+          sortOrder: 0,
+          _count: { services: 2 },
+          createdAt: '2025-12-13T03:40:06.410Z',
+          updatedAt: '2025-12-13T03:40:06.410Z',
+        },
+        {
+          id: 'cat1',
+          name: 'Compute',
+          description: 'Computing services',
+          color: '#ff0000',
+          sortOrder: 1,
+          _count: { services: 3 },
+          createdAt: '2025-12-13T03:40:06.410Z',
+          updatedAt: '2025-12-13T03:40:06.410Z',
+        },
+        {
+          id: 'cat3',
+          name: 'Network',
+          description: 'Networking services',
+          color: '#0000ff',
+          sortOrder: 2,
+          _count: { services: 1 },
+          createdAt: '2025-12-13T03:40:06.410Z',
+          updatedAt: '2025-12-13T03:40:06.410Z',
+        }
+      ];
+
+      // Mock Prisma transaction
+      mockPrisma.$transaction = jest.fn().mockResolvedValue(undefined);
+      mockPrisma.category.findMany
+        .mockResolvedValueOnce(mockExistingCategories) // For validation
+        .mockResolvedValueOnce(mockReorderedCategories); // For final result
+
+      const response = await request(app)
+        .put('/api/categories/reorder')
+        .send({ categoryOrders });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data).toEqual(mockReorderedCategories);
+      expect(response.body.message).toBe('カテゴリの並び順が正常に更新されました。');
+      expect(mockPrisma.$transaction).toHaveBeenCalled();
+    });
+
+    it('should return 400 for invalid request format', async () => {
+      const response = await request(app)
+        .put('/api/categories/reorder')
+        .send({ categoryOrders: 'invalid' });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe('INVALID_REQUEST_FORMAT');
+    });
+
+    it('should return 400 for non-existent category IDs', async () => {
+      const categoryOrders = [
+        { id: 'cat1' },
+        { id: 'nonexistent' }
+      ];
+
+      const mockExistingCategories = [
+        { id: 'cat1' }
+      ];
+
+      mockPrisma.category.findMany.mockResolvedValue(mockExistingCategories);
+
+      const response = await request(app)
+        .put('/api/categories/reorder')
+        .send({ categoryOrders });
+
+      expect(response.status).toBe(400);
+      expect(response.body.error.code).toBe('INVALID_CATEGORY_IDS');
     });
   });
 
